@@ -339,9 +339,10 @@
             },
             entities: { enemies: [], platforms: [], loot: [], interactables: [], projectiles: [] },
             visual: { particles: [], camera: { x: 0, y: 0 }, glitchLevel: 0, corruptionEvents: [] },
-            input: { keys: {}, mousePressed: false, nearInteractable: null },
+            input: { keys: {}, mousePressed: false, nearInteractable: null, interactPressed: false },
             progression: { unlockedSkills: new Set(), questLog: [] },
-            lastTime: 0
+            lastTime: 0,
+            gamePaused: false
         };
 
         // Procedural level generator
@@ -749,6 +750,7 @@
             }
 
     static showLevelCompleteScreen(terminal) {
+        gameState.gamePaused = true;
         const panel = document.getElementById('levelCompletePanel');
         panel.style.display = 'block';
         terminal.active = false;
@@ -827,6 +829,7 @@
             }
 
             static advanceToNextLevel() {
+                gameState.gamePaused = false;
                 document.getElementById('levelCompletePanel').style.display = 'none';
                 if (gameState.world.levelCompleteTimer) {
                     clearInterval(gameState.world.levelCompleteTimer);
@@ -1235,7 +1238,12 @@
 
             // Interact
             if (gameState.input.keys['e']) {
-                InteractionSystem.interact();
+                if (!gameState.input.interactPressed) {
+                    InteractionSystem.interact();
+                    gameState.input.interactPressed = true;
+                }
+            } else {
+                gameState.input.interactPressed = false;
             }
 
             // Update cooldowns
@@ -1937,6 +1945,7 @@
         }
 
         function showInventory() {
+            gameState.gamePaused = true;
             const panel = document.getElementById('inventoryPanel');
             const content = document.getElementById('inventoryContent');
             const player = gameState.player;
@@ -1989,6 +1998,7 @@
 
         function closeInventory() {
             document.getElementById('inventoryPanel').style.display = 'none';
+            gameState.gamePaused = false;
         }
 
         function toggleSkillTree() {
@@ -2001,6 +2011,7 @@
         }
 
         function showSkillTree() {
+            gameState.gamePaused = true;
             const panel = document.getElementById('skillTreePanel');
             SkillSystem.renderSkillTree();
             panel.style.display = 'block';
@@ -2008,6 +2019,7 @@
 
         function closeSkillTree() {
             document.getElementById('skillTreePanel').style.display = 'none';
+            gameState.gamePaused = false;
         }
 
         function equipWeapon(index) {
@@ -2124,6 +2136,11 @@
         function gameLoop(currentTime) {
             const deltaTime = currentTime - gameState.lastTime;
             gameState.lastTime = currentTime;
+
+            if (gameState.gamePaused) {
+                requestAnimationFrame(gameLoop);
+                return;
+            }
             
             // Update all game systems
             updatePlayer();
