@@ -69,7 +69,7 @@
             transition: width 0.3s;
         }
 
-        .skill-tree-panel, .inventory-panel {
+        .skill-tree-panel, .inventory-panel, .level-complete-panel {
             position: absolute;
             top: 50%;
             left: 50%;
@@ -112,6 +112,12 @@
 
         .skill-node:hover {
             background: #555;
+        }
+
+        .panel-section {
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #0f0;
         }
 
         .controls {
@@ -207,7 +213,7 @@
     
     <div class="ui-overlay">
         <div class="hud">
-            <div>Level: <span id="level">1</span> | XP: <span id="xp">0</span>/<span id="nextLevelXp">100</span> | Skill Points: <span id="skillPoints">0</span></div>
+            <div>Level: <span id="level">1</span> | XP: <span id="xp">0</span>/<span id="nextLevelXp">100</span> | Skill Points: <span id="skillPoints">0</span> | Shards: <span id="shards">0</span></div>
             <div class="health-bar"><div class="health-fill" id="healthBar" style="width: 100%"></div></div>
             <div>Health: <span id="health">100</span>/100</div>
             <div class="stability-bar"><div class="stability-fill" id="stabilityBar" style="width: 0%"></div></div>
@@ -246,6 +252,34 @@
             <button onclick="closeInventory()" style="margin-top: 10px;">Close (I)</button>
         </div>
 
+        <div class="level-complete-panel" id="levelCompletePanel" style="display: none; text-align: center;">
+            <h3>LEVEL COMPLETE</h3>
+            <div id="levelCompleteTimer" style="font-size: 18px; margin-bottom: 15px;">Time remaining: 60s</div>
+
+            <div class="panel-section">
+                <h4>Allocate Stats (Skill Points: <span id="lcSkillPoints">0</span>)</h4>
+                <div id="lcStatsPanel" style="display: flex; justify-content: center; gap: 15px;">
+                    <!-- Stat allocation buttons will be populated by JS -->
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <h4>Inventory (Sell Items)</h4>
+                <div id="lcInventoryContent" style="max-height: 150px; overflow-y: auto; border: 1px solid #0f0; padding: 5px;">
+                    <!-- Inventory items with sell buttons will be populated by JS -->
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <h4>Shop (Buy Items)</h4>
+                <div id="lcShopContent" style="max-height: 150px; overflow-y: auto; border: 1px solid #0f0; padding: 5px;">
+                    <!-- Shop items with buy buttons will be populated by JS -->
+                </div>
+            </div>
+
+            <button onclick="startNextLevelManually()" style="margin-top: 15px; padding: 10px 20px; font-size: 16px;">Next Level</button>
+        </div>
+
         <div class="controls">
             WASD: Move | Space: Jump | F/Click: Attack | C: Crouch | E: Interact | I: Inventory | K: Skills
         </div>
@@ -257,6 +291,12 @@
         // Enhanced game initialization with procedural generation
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+
+        const shopItems = [
+            { name: 'Health Potion', type: 'health_potion', value: 50, cost: 25 },
+            { name: 'Basic Sword', damage: 15, rarity: 'common', cost: 50 },
+            { name: 'Glitched Blade', damage: 25, rarity: 'uncommon', cost: 150 }
+        ];
 
         // Skill tree definitions
         const skillTree = {
@@ -288,12 +328,14 @@
                 stats: { str: 10, int: 10, agi: 10, lck: 10, stb: 10 },
                 powers: { phaseDash: false, rollbackJump: false, codeGrapple: false, realitySwap: false, wallJump: false },
                 inventory: [], weapon: { name: "Basic Sword", damage: 15, rarity: "common" },
+                shards: 0,
                 lastCheckpoint: { x: 100, y: 600, zone: "Stable Forest", depth: 1 },
                 dashCooldown: 0, wallJumpCooldown: 0, positionHistory: []
             },
             world: {
                 currentZone: "Stable Forest", currentDepth: 1, levelWidth: 0, levelComplete: false,
-                boss: null, bossActive: false, chestOpened: false
+                boss: null, bossActive: false, chestOpened: false,
+                levelCompleteTimer: null, levelCompleteCountdown: 60
             },
             entities: { enemies: [], platforms: [], loot: [], interactables: [], projectiles: [] },
             visual: { particles: [], camera: { x: 0, y: 0 }, glitchLevel: 0, corruptionEvents: [] },
@@ -525,9 +567,19 @@
                 gameState.player.xp += xpGain;
                 gameState.player.skillPoints += 2;
                 
-                // Unlock treasure chest
+                // Unlock treasure chest and spawn terminal
                 const chest = gameState.entities.interactables.find(i => i.type === 'treasure_chest');
                 if (chest) chest.locked = false;
+
+                const terminal = {
+                    x: boss.x - 50,
+                    y: boss.y + 40,
+                    width: 32,
+                    height: 32,
+                    type: 'level_complete_terminal',
+                    active: true
+                };
+                gameState.entities.interactables.push(terminal);
                 
                 // Hide boss health bar
                 document.getElementById('bossHealth').style.display = 'none';
@@ -662,6 +714,7 @@
                 switch (obj.type) {
                     case 'campfire': return 'Press E to rest at campfire';
                     case 'treasure_chest': return obj.locked ? 'Chest is locked' : 'Press E to open chest';
+                    case 'level_complete_terminal': return 'Press E to access Level Complete terminal';
                     case 'data_terminal': return 'Press E to access terminal';
                     case 'glitch_crystal': return 'Press E to harvest crystal';
                     case 'weapon_cache': return 'Press E to search cache';
@@ -689,8 +742,30 @@
                     case 'weapon_cache':
                         this.searchCache(obj);
                         break;
+            case 'level_complete_terminal':
+                this.showLevelCompleteScreen(obj);
+                break;
                 }
             }
+
+    static showLevelCompleteScreen(terminal) {
+        const panel = document.getElementById('levelCompletePanel');
+        panel.style.display = 'block';
+        terminal.active = false;
+
+        refreshLevelCompleteScreen();
+
+        gameState.world.levelCompleteCountdown = 60;
+        document.getElementById('levelCompleteTimer').textContent = `Time remaining: 60s`;
+        gameState.world.levelCompleteTimer = setInterval(() => {
+            gameState.world.levelCompleteCountdown--;
+            document.getElementById('levelCompleteTimer').textContent = `Time remaining: ${gameState.world.levelCompleteCountdown}s`;
+
+            if (gameState.world.levelCompleteCountdown <= 0) {
+                startNextLevelManually(); // This also clears the interval
+            }
+        }, 1000);
+    }
 
             static useCampfire(campfire) {
                 gameState.player.health = gameState.player.maxHealth;
@@ -728,9 +803,6 @@
                 
                 chest.active = false;
                 gameState.world.levelComplete = true;
-                
-                // Advance to next level after delay
-                setTimeout(() => this.advanceToNextLevel(), 3000);
             }
 
             static generateEndLevelRewards() {
@@ -755,6 +827,12 @@
             }
 
             static advanceToNextLevel() {
+                document.getElementById('levelCompletePanel').style.display = 'none';
+                if (gameState.world.levelCompleteTimer) {
+                    clearInterval(gameState.world.levelCompleteTimer);
+                    gameState.world.levelCompleteTimer = null;
+                }
+
                 gameState.world.currentDepth++;
                 
                 // Change zones every few levels
@@ -1361,12 +1439,8 @@
                     ProgressionSystem.checkLevelUp();
                     break;
                 case 'glitch_shard':
-                    gameState.player.inventory.push({
-                        name: 'Glitch Shard',
-                        type: 'material',
-                        description: 'Fragment of corrupted data'
-                    });
-                    ParticleSystem.create(item.x, item.y, '#f0f', '+Shard');
+                    gameState.player.shards += item.value;
+                    ParticleSystem.create(item.x, item.y, '#f0f', `+${item.value} Shard(s)`);
                     break;
                 case 'weapon':
                     gameState.player.inventory.push(item.weapon);
@@ -1791,7 +1865,8 @@
                 'treasure_chest': '#ffa500',
                 'data_terminal': '#00ffff',
                 'glitch_crystal': '#ff00ff',
-                'weapon_cache': '#ffff00'
+                'weapon_cache': '#ffff00',
+                'level_complete_terminal': '#00ff00'
             };
             return colors[type] || '#888';
         }
@@ -1828,6 +1903,7 @@
             document.getElementById('xp').textContent = player.xp;
             document.getElementById('nextLevelXp').textContent = player.level * 100;
             document.getElementById('skillPoints').textContent = player.skillPoints;
+            document.getElementById('shards').textContent = player.shards;
             document.getElementById('health').textContent = Math.floor(player.health);
             document.getElementById('stability').textContent = Math.floor(player.stability);
             
@@ -1945,6 +2021,98 @@
 
         function allocateStat(stat) {
             ProgressionSystem.allocateStat(stat);
+            if (document.getElementById('levelCompletePanel').style.display === 'block') {
+                refreshLevelCompleteScreen();
+            }
+        }
+
+        function refreshLevelCompleteScreen() {
+            const player = gameState.player;
+
+            // Stats
+            document.getElementById('lcSkillPoints').textContent = player.skillPoints;
+            const lcStatsPanel = document.getElementById('lcStatsPanel');
+            const stats = ['str', 'int', 'agi', 'lck', 'stb'];
+            let statsHtml = '';
+            stats.forEach(stat => {
+                statsHtml += `
+                    <div style="text-align: center;">
+                        <div>${stat.toUpperCase()}: ${player.stats[stat]}</div>
+                        <button onclick="allocateStat('${stat}')" ${player.skillPoints <= 0 ? 'disabled' : ''}>+</button>
+                    </div>
+                `;
+            });
+            lcStatsPanel.innerHTML = statsHtml;
+
+            // Inventory
+            const lcInventoryContent = document.getElementById('lcInventoryContent');
+            let inventoryHtml = '';
+            if (player.inventory.length === 0) {
+                inventoryHtml = '<div>- Empty -</div>';
+            } else {
+                player.inventory.forEach((item, index) => {
+                    const sellPrice = Math.floor((item.damage || 10) * 0.5);
+                    inventoryHtml += `
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                            <span>${item.name} (Value: ${sellPrice} shards)</span>
+                            <button onclick="sellItem(${index})">Sell</button>
+                        </div>
+                    `;
+                });
+            }
+            lcInventoryContent.innerHTML = inventoryHtml;
+
+            // Shop
+            const lcShopContent = document.getElementById('lcShopContent');
+            let shopHtml = '';
+            shopItems.forEach((item, index) => {
+                shopHtml += `
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                        <span>${item.name} (Cost: ${item.cost} shards)</span>
+                        <button onclick="buyItem(${index})" ${player.shards < item.cost ? 'disabled' : ''}>Buy</button>
+                    </div>
+                `;
+            });
+            lcShopContent.innerHTML = shopHtml;
+        }
+
+        function sellItem(index) {
+            const item = gameState.player.inventory[index];
+            if (!item) return;
+
+            const sellPrice = Math.floor((item.damage || 10) * 0.5);
+            gameState.player.shards += sellPrice;
+            gameState.player.inventory.splice(index, 1);
+
+            refreshLevelCompleteScreen();
+            updateUI();
+        }
+
+        function buyItem(index) {
+            const item = shopItems[index];
+            if (!item || gameState.player.shards < item.cost) return;
+
+            gameState.player.shards -= item.cost;
+
+            if (item.type === 'health_potion') {
+                gameState.player.health = Math.min(gameState.player.maxHealth, gameState.player.health + item.value);
+                ParticleSystem.create(gameState.player.x, gameState.player.y, '#0f0', '+Health');
+            } else {
+                const boughtItem = { ...item };
+                delete boughtItem.cost;
+                gameState.player.inventory.push(boughtItem);
+            }
+
+            refreshLevelCompleteScreen();
+            updateUI();
+        }
+
+        function startNextLevelManually() {
+            if (gameState.world.levelCompleteTimer) {
+                clearInterval(gameState.world.levelCompleteTimer);
+                gameState.world.levelCompleteTimer = null;
+            }
+            InteractionSystem.advanceToNextLevel();
         }
 
         function unlockSkill(skillId, tree) {
@@ -2006,6 +2174,9 @@
         window.allocateStat = allocateStat;
         window.unlockSkill = unlockSkill;
         window.equipWeapon = equipWeapon;
+        window.startNextLevelManually = startNextLevelManually;
+        window.sellItem = sellItem;
+        window.buyItem = buyItem;
 
         // Start the enhanced game
         initEnhancedGame();
