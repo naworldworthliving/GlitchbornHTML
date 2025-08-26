@@ -1,0 +1,2015 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Glitch Realm - Enhanced 2D Platformer RPG</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #111;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+        }
+
+        canvas {
+            background: linear-gradient(180deg, #2a1810 0%, #1a0f08 100%);
+            display: block;
+            margin: 0 auto;
+            border: 2px solid #444;
+        }
+
+        .ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #0f0;
+            font-size: 14px;
+            text-shadow: 0 0 5px #0f0;
+        }
+
+        .stats-panel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid #0f0;
+            padding: 10px;
+            color: #0f0;
+            font-size: 12px;
+            min-width: 180px;
+        }
+
+        .boss-health {
+            position: absolute;
+            top: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 400px;
+            height: 30px;
+            background: rgba(0, 0, 0, 0.8);
+            border: 2px solid #f00;
+            display: none;
+        }
+
+        .boss-health-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #f00, #ff0);
+            transition: width 0.3s;
+        }
+
+        .skill-tree-panel, .inventory-panel {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.95);
+            border: 2px solid #0f0;
+            padding: 20px;
+            color: #0f0;
+            font-size: 14px;
+            display: none;
+            max-width: 600px;
+            max-height: 600px;
+            overflow-y: auto;
+            pointer-events: auto;
+        }
+
+        .skill-node {
+            display: inline-block;
+            width: 80px;
+            height: 60px;
+            background: #333;
+            border: 2px solid #666;
+            margin: 5px;
+            padding: 5px;
+            text-align: center;
+            font-size: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .skill-node.unlocked {
+            background: #0a4a0a;
+            border-color: #0f0;
+        }
+
+        .skill-node.available {
+            background: #4a4a0a;
+            border-color: #ff0;
+        }
+
+        .skill-node:hover {
+            background: #555;
+        }
+
+        .controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: #888;
+            font-size: 12px;
+        }
+
+        .interaction-prompt {
+            position: absolute;
+            top: 200px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: #0f0;
+            padding: 10px;
+            border: 1px solid #0f0;
+            display: none;
+        }
+
+        .health-bar, .stability-bar {
+            width: 200px;
+            height: 20px;
+            border: 1px solid #0f0;
+            margin: 5px 0;
+        }
+
+        .health-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #0f0, #090);
+            transition: width 0.3s;
+        }
+
+        .stability-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #f00, #ff0);
+            transition: width 0.3s;
+        }
+
+        .glitch-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            mix-blend-mode: screen;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .corruption-high {
+            animation: corruption-glitch 0.1s infinite;
+        }
+
+        @keyframes corruption-glitch {
+            0% { transform: translateX(0) rotateX(0deg); }
+            20% { transform: translateX(-2px) rotateX(0.1deg); }
+            40% { transform: translateX(2px) rotateX(-0.1deg); }
+            60% { transform: translateX(-1px) rotateX(0.05deg); }
+            80% { transform: translateX(1px) rotateX(-0.05deg); }
+            100% { transform: translateX(0) rotateX(0deg); }
+        }
+
+        button {
+            background: #0f0;
+            border: none;
+            color: black;
+            padding: 8px 15px;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        button:hover {
+            background: #0a0;
+            transform: scale(1.05);
+        }
+
+        button:disabled {
+            background: #666;
+            color: #999;
+            cursor: not-allowed;
+            transform: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="1200" height="800"></canvas>
+    
+    <div class="ui-overlay">
+        <div class="hud">
+            <div>Level: <span id="level">1</span> | XP: <span id="xp">0</span>/<span id="nextLevelXp">100</span> | Skill Points: <span id="skillPoints">0</span></div>
+            <div class="health-bar"><div class="health-fill" id="healthBar" style="width: 100%"></div></div>
+            <div>Health: <span id="health">100</span>/100</div>
+            <div class="stability-bar"><div class="stability-fill" id="stabilityBar" style="width: 0%"></div></div>
+            <div>Corruption: <span id="stability">0</span>/100</div>
+        </div>
+
+        <div class="boss-health" id="bossHealth">
+            <div>Boss Health</div>
+            <div class="boss-health-fill" id="bossHealthFill" style="width: 100%"></div>
+        </div>
+
+        <div class="stats-panel">
+            <div><strong>STATS</strong></div>
+            <div>STR: <span id="str">10</span> <button onclick="allocateStat('str')" id="strBtn">+</button></div>
+            <div>INT: <span id="int">10</span> <button onclick="allocateStat('int')" id="intBtn">+</button></div>
+            <div>AGI: <span id="agi">10</span> <button onclick="allocateStat('agi')" id="agiBtn">+</button></div>
+            <div>LCK: <span id="lck">10</span> <button onclick="allocateStat('lck')" id="lckBtn">+</button></div>
+            <div>STB: <span id="stb">10</span> <button onclick="allocateStat('stb')" id="stbBtn">+</button></div>
+            <div style="margin-top: 10px;"><strong>Zone: <span id="currentZone">Stable Forest</span></strong></div>
+            <div>Depth: <span id="currentDepth">1</span></div>
+        </div>
+
+        <div class="interaction-prompt" id="interactionPrompt">
+            Press E to interact
+        </div>
+
+        <div class="skill-tree-panel" id="skillTreePanel">
+            <h3>Skill Tree</h3>
+            <div id="skillTreeContent"></div>
+            <button onclick="closeSkillTree()" style="margin-top: 10px;">Close (K)</button>
+        </div>
+
+        <div class="inventory-panel" id="inventoryPanel">
+            <h3>Character Stats & Inventory</h3>
+            <div id="inventoryContent"></div>
+            <button onclick="closeInventory()" style="margin-top: 10px;">Close (I)</button>
+        </div>
+
+        <div class="controls">
+            WASD: Move | Space: Jump | F/Click: Attack | C: Crouch | E: Interact | I: Inventory | K: Skills
+        </div>
+
+        <div class="glitch-screen" id="glitchScreen"></div>
+    </div>
+
+    <script>
+        // Enhanced game initialization with procedural generation
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Skill tree definitions
+        const skillTree = {
+            warrior: {
+                'combat_mastery': { name: 'Combat Mastery', cost: 1, prereqs: [], effect: { str: 3, damage: 5 }, unlocked: false },
+                'berserker_rage': { name: 'Berserker Rage', cost: 2, prereqs: ['combat_mastery'], effect: { str: 5, attackSpeed: 1.5 }, unlocked: false },
+                'iron_will': { name: 'Iron Will', cost: 1, prereqs: [], effect: { stb: 4, corruptionResist: 0.2 }, unlocked: false },
+                'phase_dash': { name: 'Phase Dash', cost: 3, prereqs: ['combat_mastery'], effect: { power: 'phaseDash' }, unlocked: false }
+            },
+            mage: {
+                'data_manipulation': { name: 'Data Manipulation', cost: 1, prereqs: [], effect: { int: 3, magicDamage: 8 }, unlocked: false },
+                'glitch_mastery': { name: 'Glitch Mastery', cost: 2, prereqs: ['data_manipulation'], effect: { int: 5, glitchPower: 1.3 }, unlocked: false },
+                'reality_swap': { name: 'Reality Swap', cost: 3, prereqs: ['glitch_mastery'], effect: { power: 'realitySwap' }, unlocked: false }
+            },
+            survivor: {
+                'quick_reflexes': { name: 'Quick Reflexes', cost: 1, prereqs: [], effect: { agi: 3, dodgeChance: 0.1 }, unlocked: false },
+                'wall_jump': { name: 'Wall Jump', cost: 2, prereqs: ['quick_reflexes'], effect: { agi: 3, power: 'wallJump' }, unlocked: false },
+                'rollback_jump': { name: 'Rollback Jump', cost: 3, prereqs: ['wall_jump'], effect: { power: 'rollbackJump' }, unlocked: false }
+            }
+        };
+
+        // Enhanced game state
+        let gameState = {
+            player: {
+                x: 100, y: 600, width: 32, height: 48,
+                velX: 0, velY: 0, onGround: false, facingRight: true,
+                health: 100, maxHealth: 100, stability: 0, maxStability: 100,
+                level: 1, xp: 0, skillPoints: 0,
+                stats: { str: 10, int: 10, agi: 10, lck: 10, stb: 10 },
+                powers: { phaseDash: false, rollbackJump: false, codeGrapple: false, realitySwap: false, wallJump: false },
+                inventory: [], weapon: { name: "Basic Sword", damage: 15, rarity: "common" },
+                lastCheckpoint: { x: 100, y: 600, zone: "Stable Forest", depth: 1 },
+                dashCooldown: 0, wallJumpCooldown: 0, positionHistory: []
+            },
+            world: {
+                currentZone: "Stable Forest", currentDepth: 1, levelWidth: 0, levelComplete: false,
+                boss: null, bossActive: false, chestOpened: false
+            },
+            entities: { enemies: [], platforms: [], loot: [], interactables: [], projectiles: [] },
+            visual: { particles: [], camera: { x: 0, y: 0 }, glitchLevel: 0, corruptionEvents: [] },
+            input: { keys: {}, mousePressed: false, nearInteractable: null },
+            progression: { unlockedSkills: new Set(), questLog: [] },
+            lastTime: 0
+        };
+
+        // Procedural level generator
+        class LevelGenerator {
+            static generateLevel(zone, depth) {
+                const width = Math.min(5000 + depth * 1000, 15000);
+                const platforms = [];
+                const enemies = [];
+                const interactables = [];
+                const loot = [];
+
+                // Ground platforms
+                for (let x = 0; x < width; x += 400) {
+                    platforms.push({
+                        x: x, y: 750, width: 400, height: 50, type: 'ground'
+                    });
+                }
+
+                // Procedural platform generation
+                let currentX = 200;
+                let currentY = 650;
+                const targetX = width - 500;
+
+                while (currentX < targetX) {
+                    // Create platform cluster
+                    const clusterSize = 2 + Math.floor(Math.random() * 3);
+                    for (let i = 0; i < clusterSize; i++) {
+                        platforms.push({
+                            x: currentX + i * 150,
+                            y: currentY + Math.random() * 100 - 50,
+                            width: 80 + Math.random() * 60,
+                            height: 20,
+                            type: depth > 2 ? 'unstable' : 'platform'
+                        });
+                    }
+
+                    // Add enemies to cluster
+                    if (Math.random() < 0.7) {
+                        enemies.push(this.generateEnemy(currentX + Math.random() * 300, currentY - 50, depth));
+                    }
+
+                    // Add interactables occasionally
+                    if (Math.random() < 0.3) {
+                        interactables.push(this.generateInteractable(currentX + Math.random() * 200, currentY - 50, depth));
+                    }
+
+                    // Progress forward
+                    currentX += 300 + Math.random() * 400;
+                    currentY = 400 + Math.random() * 250;
+                }
+
+                // Add campfire checkpoints every 2000 units
+                for (let x = 1500; x < width; x += 2000) {
+                    const nearestPlatform = platforms.find(p => Math.abs(p.x - x) < 200);
+                    if (nearestPlatform) {
+                        interactables.push({
+                            x: nearestPlatform.x + 50,
+                            y: nearestPlatform.y - 40,
+                            width: 32, height: 40,
+                            type: 'campfire',
+                            active: true
+                        });
+                    }
+                }
+
+                // Boss arena at the end
+                const bossX = width - 400;
+                platforms.push({
+                    x: bossX - 200, y: 600, width: 600, height: 50, type: 'boss_arena'
+                });
+
+                // End treasure chest
+                interactables.push({
+                    x: bossX + 150, y: 550, width: 32, height: 32,
+                    type: 'treasure_chest', locked: true
+                });
+
+                return { platforms, enemies, interactables, loot, width, bossX };
+            }
+
+            static generateEnemy(x, y, depth) {
+                const types = ['glitch_wolf', 'data_sprite', 'corrupted_guard', 'void_stalker'];
+                const type = types[Math.min(Math.floor(depth / 2), types.length - 1)];
+                
+                const baseStats = {
+                    glitch_wolf: { health: 30, damage: 10, speed: 1 },
+                    data_sprite: { health: 25, damage: 8, speed: 0.8 },
+                    corrupted_guard: { health: 40, damage: 12, speed: 0.6 },
+                    void_stalker: { health: 60, damage: 15, speed: 1.2 }
+                };
+
+                const stats = baseStats[type];
+                const scaling = 1 + (depth - 1) * 0.3;
+
+                return {
+                    x: x, y: y, width: 24, height: 32,
+                    type: type, velX: stats.speed * (Math.random() > 0.5 ? 1 : -1),
+                    health: Math.floor(stats.health * scaling),
+                    maxHealth: Math.floor(stats.health * scaling),
+                    damage: Math.floor(stats.damage * scaling),
+                    ai: { state: 'patrol', timer: 0, target: null }
+                };
+            }
+
+            static generateInteractable(x, y, depth) {
+                const types = ['data_terminal', 'glitch_crystal', 'weapon_cache'];
+                const type = types[Math.floor(Math.random() * types.length)];
+                
+                return {
+                    x: x, y: y, width: 24, height: 24,
+                    type: type, active: true, uses: type === 'data_terminal' ? 1 : 3
+                };
+            }
+
+            static generateBoss(x, y, depth) {
+                const bossTypes = [
+                    { name: 'Duplicator Knight', health: 200, phases: 3 },
+                    { name: 'Void Weaver', health: 300, phases: 4 },
+                    { name: 'Data Corruption Core', health: 500, phases: 5 }
+                ];
+
+                const bossData = bossTypes[Math.min(Math.floor((depth - 1) / 3), bossTypes.length - 1)];
+                const scaling = 1 + (depth - 1) * 0.2;
+
+                return {
+                    x: x, y: y, width: 64, height: 80,
+                    name: bossData.name,
+                    health: Math.floor(bossData.health * scaling),
+                    maxHealth: Math.floor(bossData.health * scaling),
+                    phase: 1, maxPhases: bossData.phases,
+                    ai: { state: 'idle', timer: 0, attackCooldown: 0 },
+                    velX: 0, velY: 0, onGround: false,
+                    attacks: ['charge', 'duplicate', 'teleport', 'glitch_wave']
+                };
+            }
+        }
+
+        // Enhanced combat system
+        class CombatSystem {
+            static attack(attacker, target, weapon = null) {
+                let damage = weapon ? weapon.damage : 10;
+                if (attacker === gameState.player) {
+                    damage += gameState.player.stats.str;
+                    // Critical hit chance
+                    if (Math.random() < gameState.player.stats.lck * 0.01) {
+                        damage *= 2;
+                        ParticleSystem.create(target.x, target.y - 20, '#ff0', 'CRIT!');
+                    }
+                }
+
+                target.health -= damage;
+                ParticleSystem.create(target.x, target.y, '#f00', `-${damage}`);
+
+                // Hit effects
+                if (target === gameState.player) {
+                    gameState.player.stability += Math.floor(damage * 0.3);
+                    gameState.player.velX += attacker.x < gameState.player.x ? 8 : -8;
+                } else {
+                    target.velX = attacker.x < target.x ? 5 : -5;
+                }
+
+                return damage;
+            }
+
+            static checkPlayerAttack() {
+                const player = gameState.player;
+                const attackRange = 60;
+                const weapon = player.weapon;
+
+                gameState.entities.enemies.forEach((enemy, index) => {
+                    const dist = Math.sqrt(Math.pow(enemy.x - player.x, 2) + Math.pow(enemy.y - player.y, 2));
+                    if (dist < attackRange) {
+                        this.attack(player, enemy, weapon);
+                        
+                        if (enemy.health <= 0) {
+                            this.defeatEnemy(enemy, index);
+                        }
+                    }
+                });
+
+                // Attack boss if present
+                if (gameState.world.boss && gameState.world.bossActive) {
+                    const boss = gameState.world.boss;
+                    const dist = Math.sqrt(Math.pow(boss.x - player.x, 2) + Math.pow(boss.y - player.y, 2));
+                    if (dist < attackRange) {
+                        this.attack(player, boss, weapon);
+                        
+                        if (boss.health <= 0) {
+                            this.defeatBoss();
+                        } else if (boss.health < boss.maxHealth * (boss.maxPhases - boss.phase) / boss.maxPhases) {
+                            boss.phase = Math.min(boss.maxPhases, boss.phase + 1);
+                            ParticleSystem.create(boss.x, boss.y, '#f0f', 'PHASE CHANGE!');
+                        }
+                    }
+                }
+
+                ParticleSystem.create(
+                    player.x + (player.facingRight ? 40 : -10), 
+                    player.y + 20, 
+                    '#0ff', 
+                    'SLASH'
+                );
+            }
+
+            static defeatEnemy(enemy, index) {
+                const xpGain = 20 + Math.floor(Math.random() * 30) + gameState.world.currentDepth * 5;
+                gameState.player.xp += xpGain;
+                
+                LootSystem.createDrop(enemy.x, enemy.y);
+                gameState.entities.enemies.splice(index, 1);
+                gameState.player.stability += 2;
+                
+                ParticleSystem.create(enemy.x, enemy.y, '#ff0', `+${xpGain} XP`);
+                ProgressionSystem.checkLevelUp();
+            }
+
+            static defeatBoss() {
+                const boss = gameState.world.boss;
+                gameState.world.bossActive = false;
+                
+                // Major XP and skill point reward
+                const xpGain = 200 + gameState.world.currentDepth * 50;
+                gameState.player.xp += xpGain;
+                gameState.player.skillPoints += 2;
+                
+                // Unlock treasure chest
+                const chest = gameState.entities.interactables.find(i => i.type === 'treasure_chest');
+                if (chest) chest.locked = false;
+                
+                // Hide boss health bar
+                document.getElementById('bossHealth').style.display = 'none';
+                
+                ParticleSystem.create(boss.x, boss.y, '#ff0', 'BOSS DEFEATED!');
+                ParticleSystem.create(boss.x, boss.y - 30, '#0f0', `+${xpGain} XP`);
+                ParticleSystem.create(boss.x, boss.y - 60, '#f0f', '+2 SKILL POINTS');
+                
+                ProgressionSystem.checkLevelUp();
+            }
+        }
+
+        // Skill system
+        class SkillSystem {
+            static canUnlock(skillId, tree) {
+                const skill = skillTree[tree][skillId];
+                if (!skill || skill.unlocked) return false;
+                if (gameState.player.skillPoints < skill.cost) return false;
+                
+                return skill.prereqs.every(prereq => 
+                    Object.values(skillTree).some(t => t[prereq] && t[prereq].unlocked)
+                );
+            }
+
+            static unlockSkill(skillId, tree) {
+                if (!this.canUnlock(skillId, tree)) return false;
+                
+                const skill = skillTree[tree][skillId];
+                skill.unlocked = true;
+                gameState.player.skillPoints -= skill.cost;
+                gameState.progression.unlockedSkills.add(skillId);
+                
+                // Apply skill effects
+                this.applySkillEffect(skill.effect);
+                
+                ParticleSystem.create(gameState.player.x, gameState.player.y - 30, '#f0f', `UNLOCKED: ${skill.name}`);
+                return true;
+            }
+
+            static applySkillEffect(effect) {
+                Object.keys(effect).forEach(key => {
+                    if (gameState.player.stats.hasOwnProperty(key)) {
+                        gameState.player.stats[key] += effect[key];
+                    } else if (key === 'power' && effect[key]) {
+                        gameState.player.powers[effect[key]] = true;
+                    }
+                });
+            }
+
+            static renderSkillTree() {
+                const content = document.getElementById('skillTreeContent');
+                let html = '';
+                
+                Object.keys(skillTree).forEach(treeName => {
+                    html += `<h4>${treeName.toUpperCase()}</h4><div class="skill-tree-row">`;
+                    
+                    Object.keys(skillTree[treeName]).forEach(skillId => {
+                        const skill = skillTree[treeName][skillId];
+                        let className = 'skill-node';
+                        
+                        if (skill.unlocked) {
+                            className += ' unlocked';
+                        } else if (this.canUnlock(skillId, treeName)) {
+                            className += ' available';
+                        }
+                        
+                        html += `<div class="${className}" onclick="unlockSkill('${skillId}', '${treeName}')">
+                            <div><strong>${skill.name}</strong></div>
+                            <div>Cost: ${skill.cost}</div>
+                        </div>`;
+                    });
+                    
+                    html += '</div><br>';
+                });
+                
+                content.innerHTML = html;
+            }
+        }
+
+        // Enhanced progression system
+        class ProgressionSystem {
+            static checkLevelUp() {
+                const xpNeeded = gameState.player.level * 100;
+                if (gameState.player.xp >= xpNeeded) {
+                    gameState.player.xp -= xpNeeded;
+                    gameState.player.level++;
+                    gameState.player.skillPoints += 1;
+                    gameState.player.maxHealth += 20;
+                    gameState.player.health = gameState.player.maxHealth;
+                    
+                    ParticleSystem.create(gameState.player.x, gameState.player.y - 30, '#ff0', 'LEVEL UP!');
+                    ParticleSystem.create(gameState.player.x, gameState.player.y - 60, '#0f0', '+1 SKILL POINT');
+                }
+            }
+
+            static allocateStat(stat) {
+                if (gameState.player.skillPoints > 0) {
+                    gameState.player.stats[stat] += 1;
+                    gameState.player.skillPoints -= 1;
+                    ParticleSystem.create(gameState.player.x, gameState.player.y - 30, '#0ff', `+1 ${stat.toUpperCase()}`);
+                }
+            }
+        }
+
+        // Interaction system
+        class InteractionSystem {
+            static update() {
+                const player = gameState.player;
+                let nearestInteractable = null;
+                let minDist = 80;
+                
+                gameState.entities.interactables.forEach(obj => {
+                    const dist = Math.sqrt(Math.pow(obj.x - player.x, 2) + Math.pow(obj.y - player.y, 2));
+                    if (dist < minDist && obj.active) {
+                        nearestInteractable = obj;
+                        minDist = dist;
+                    }
+                });
+                
+                gameState.input.nearInteractable = nearestInteractable;
+                
+                const prompt = document.getElementById('interactionPrompt');
+                if (nearestInteractable) {
+                    prompt.style.display = 'block';
+                    prompt.textContent = this.getInteractionText(nearestInteractable);
+                } else {
+                    prompt.style.display = 'none';
+                }
+            }
+
+            static getInteractionText(obj) {
+                switch (obj.type) {
+                    case 'campfire': return 'Press E to rest at campfire';
+                    case 'treasure_chest': return obj.locked ? 'Chest is locked' : 'Press E to open chest';
+                    case 'data_terminal': return 'Press E to access terminal';
+                    case 'glitch_crystal': return 'Press E to harvest crystal';
+                    case 'weapon_cache': return 'Press E to search cache';
+                    default: return 'Press E to interact';
+                }
+            }
+
+            static interact() {
+                const obj = gameState.input.nearInteractable;
+                if (!obj) return;
+                
+                switch (obj.type) {
+                    case 'campfire':
+                        this.useCampfire(obj);
+                        break;
+                    case 'treasure_chest':
+                        if (!obj.locked) this.openChest(obj);
+                        break;
+                    case 'data_terminal':
+                        this.useTerminal(obj);
+                        break;
+                    case 'glitch_crystal':
+                        this.harvestCrystal(obj);
+                        break;
+                    case 'weapon_cache':
+                        this.searchCache(obj);
+                        break;
+                }
+            }
+
+            static useCampfire(campfire) {
+                gameState.player.health = gameState.player.maxHealth;
+                gameState.player.stability = Math.max(0, gameState.player.stability - 20);
+                gameState.player.lastCheckpoint = {
+                    x: campfire.x,
+                    y: campfire.y - 50,
+                    zone: gameState.world.currentZone,
+                    depth: gameState.world.currentDepth
+                };
+                
+                ParticleSystem.create(campfire.x, campfire.y, '#ff0', 'RESTED');
+                ParticleSystem.create(campfire.x, campfire.y - 20, '#0f0', 'CHECKPOINT');
+            }
+
+            static openChest(chest) {
+                if (chest.locked) return;
+                
+                // End of level rewards
+                const rewards = this.generateEndLevelRewards();
+                rewards.forEach(reward => {
+                    if (reward.type === 'weapon') {
+                        gameState.player.inventory.push(reward.item);
+                        if (reward.item.damage > gameState.player.weapon.damage) {
+                            gameState.player.weapon = reward.item;
+                        }
+                    } else if (reward.type === 'xp') {
+                        gameState.player.xp += reward.value;
+                    } else if (reward.type === 'skillPoints') {
+                        gameState.player.skillPoints += reward.value;
+                    }
+                    
+                    ParticleSystem.create(chest.x, chest.y - 20 * rewards.indexOf(reward), '#ff0', reward.text);
+                });
+                
+                chest.active = false;
+                gameState.world.levelComplete = true;
+                
+                // Advance to next level after delay
+                setTimeout(() => this.advanceToNextLevel(), 3000);
+            }
+
+            static generateEndLevelRewards() {
+                const rewards = [];
+                const depth = gameState.world.currentDepth;
+                
+                // XP reward
+                const xpReward = 100 + depth * 50;
+                rewards.push({ type: 'xp', value: xpReward, text: `+${xpReward} XP` });
+                
+                // Skill points
+                const skillPointReward = 1 + Math.floor(depth / 3);
+                rewards.push({ type: 'skillPoints', value: skillPointReward, text: `+${skillPointReward} Skill Points` });
+                
+                // Weapon chance
+                if (Math.random() < 0.4 + depth * 0.1) {
+                    const weapon = LootSystem.generateWeapon(depth + 1);
+                    rewards.push({ type: 'weapon', item: weapon, text: `Found: ${weapon.name}` });
+                }
+                
+                return rewards;
+            }
+
+            static advanceToNextLevel() {
+                gameState.world.currentDepth++;
+                
+                // Change zones every few levels
+                const zones = ['Stable Forest', 'Corrupted Plains', 'Scrap Mines', 'Glitch Tower', 'Final Core'];
+                const zoneIndex = Math.min(Math.floor((gameState.world.currentDepth - 1) / 3), zones.length - 1);
+                gameState.world.currentZone = zones[zoneIndex];
+                
+                // Generate new level
+                const levelData = LevelGenerator.generateLevel(gameState.world.currentZone, gameState.world.currentDepth);
+                gameState.entities.platforms = levelData.platforms;
+                gameState.entities.enemies = levelData.enemies;
+                gameState.entities.interactables = levelData.interactables;
+                gameState.entities.loot = levelData.loot;
+                gameState.world.levelWidth = levelData.width;
+                gameState.world.levelComplete = false;
+                gameState.world.chestOpened = false;
+                
+                // Generate boss
+                gameState.world.boss = LevelGenerator.generateBoss(levelData.bossX, 520, gameState.world.currentDepth);
+                gameState.world.bossActive = false;
+                
+                // Reset player position
+                gameState.player.x = 100;
+                gameState.player.y = 600;
+                gameState.player.velX = 0;
+                gameState.player.velY = 0;
+                
+                ParticleSystem.create(gameState.player.x, gameState.player.y - 50, '#f0f', `Entering ${gameState.world.currentZone}`);
+            }
+
+            static useTerminal(terminal) {
+                if (terminal.uses <= 0) return;
+                
+                terminal.uses--;
+                gameState.player.xp += 30;
+                gameState.player.stability -= 5;
+                
+                ParticleSystem.create(terminal.x, terminal.y, '#0ff', '+30 XP');
+                ParticleSystem.create(terminal.x, terminal.y - 20, '#0f0', 'Data Downloaded');
+                
+                if (terminal.uses <= 0) {
+                    terminal.active = false;
+                }
+            }
+
+            static harvestCrystal(crystal) {
+                if (crystal.uses <= 0) return;
+                
+                crystal.uses--;
+                gameState.player.inventory.push({
+                    name: 'Glitch Crystal',
+                    type: 'material',
+                    description: 'Pulsing with corrupted energy'
+                });
+                
+                ParticleSystem.create(crystal.x, crystal.y, '#f0f', 'Crystal Harvested');
+                
+                if (crystal.uses <= 0) {
+                    crystal.active = false;
+                }
+            }
+
+            static searchCache(cache) {
+                if (cache.uses <= 0) return;
+                
+                cache.uses--;
+                
+                if (Math.random() < 0.6) {
+                    const weapon = LootSystem.generateWeapon(gameState.world.currentDepth);
+                    gameState.player.inventory.push(weapon);
+                    ParticleSystem.create(cache.x, cache.y, '#0ff', `Found: ${weapon.name}`);
+                } else {
+                    const healthPots = Math.floor(Math.random() * 3) + 1;
+                    for (let i = 0; i < healthPots; i++) {
+                        LootSystem.createSpecificDrop(cache.x + i * 10, cache.y, 'health_potion', 50);
+                    }
+                    ParticleSystem.create(cache.x, cache.y, '#0f0', `+${healthPots} Health Potions`);
+                }
+                
+                if (cache.uses <= 0) {
+                    cache.active = false;
+                }
+            }
+        }
+
+        // Enhanced loot system
+        class LootSystem {
+            static createDrop(x, y) {
+                const lootTypes = [
+                    { type: 'health_potion', value: 30, weight: 40 },
+                    { type: 'xp_fragment', value: 25, weight: 35 },
+                    { type: 'glitch_shard', value: 1, weight: 20 },
+                    { type: 'weapon', value: 0, weight: 5 }
+                ];
+                
+                // Increase rare drops with luck
+                const luckBonus = gameState.player.stats.lck * 0.5;
+                lootTypes[3].weight += luckBonus;
+                
+                const totalWeight = lootTypes.reduce((sum, item) => sum + item.weight, 0);
+                const roll = Math.random() * totalWeight;
+                let currentWeight = 0;
+                
+                for (let loot of lootTypes) {
+                    currentWeight += loot.weight;
+                    if (roll <= currentWeight) {
+                        if (loot.type === 'weapon') {
+                            this.createWeaponDrop(x, y);
+                        } else {
+                            this.createSpecificDrop(x, y, loot.type, loot.value);
+                        }
+                        break;
+                    }
+                }
+            }
+
+            static createSpecificDrop(x, y, type, value) {
+                gameState.entities.loot.push({
+                    x: x, y: y, width: 16, height: 16,
+                    type: type, value: value
+                });
+            }
+
+            static createWeaponDrop(x, y) {
+                const weapon = this.generateWeapon(gameState.world.currentDepth);
+                gameState.entities.loot.push({
+                    x: x, y: y, width: 16, height: 16,
+                    type: 'weapon', weapon: weapon
+                });
+            }
+
+            static generateWeapon(level) {
+                const prefixes = ['Glitched', 'Corrupted', 'Stable', 'Quantum', 'Void', 'Data'];
+                const bases = ['Sword', 'Blade', 'Spear', 'Axe', 'Hammer', 'Staff'];
+                const suffixes = ['of Power', 'of Speed', 'of Corruption', 'of Stability', 'of Luck'];
+                
+                const rarities = [
+                    { name: 'common', color: '#ccc', damageMultiplier: 1.0, effectChance: 0 },
+                    { name: 'uncommon', color: '#0f0', damageMultiplier: 1.2, effectChance: 0.1 },
+                    { name: 'rare', color: '#0af', damageMultiplier: 1.5, effectChance: 0.2 },
+                    { name: 'epic', color: '#a0f', damageMultiplier: 2.0, effectChance: 0.3 },
+                    { name: 'legendary', color: '#fa0', damageMultiplier: 3.0, effectChance: 0.5 }
+                ];
+                
+                // Rarity based on level and luck
+                let rarityIndex = 0;
+                const luckBonus = gameState.player.stats.lck * 0.01;
+                const levelBonus = level * 0.05;
+                const roll = Math.random() - luckBonus - levelBonus;
+                
+                if (roll < 0.05) rarityIndex = 4;
+                else if (roll < 0.15) rarityIndex = 3;
+                else if (roll < 0.35) rarityIndex = 2;
+                else if (roll < 0.65) rarityIndex = 1;
+                
+                const rarity = rarities[rarityIndex];
+                const baseDamage = 15 + level * 5;
+                const damage = Math.floor(baseDamage * rarity.damageMultiplier);
+                
+                let name = bases[Math.floor(Math.random() * bases.length)];
+                if (rarityIndex > 0) {
+                    name = prefixes[Math.floor(Math.random() * prefixes.length)] + ' ' + name;
+                }
+                if (rarityIndex > 2) {
+                    name += ' ' + suffixes[Math.floor(Math.random() * suffixes.length)];
+                }
+                
+                const weapon = {
+                    name: name,
+                    damage: damage,
+                    rarity: rarity.name,
+                    color: rarity.color,
+                    effects: []
+                };
+                
+                // Add random effects
+                if (Math.random() < rarity.effectChance) {
+                    const effects = [
+                        'Chance to teleport enemy',
+                        'Life steal on hit',
+                        'Increased crit chance',
+                        'Corruption resistance',
+                        'Double attack speed'
+                    ];
+                    weapon.effects.push(effects[Math.floor(Math.random() * effects.length)]);
+                }
+                
+                return weapon;
+            }
+        }
+
+        // Particle system
+        class ParticleSystem {
+            static create(x, y, color, text, velY = -2) {
+                gameState.visual.particles.push({
+                    x: x, y: y, color: color, text: text,
+                    velY: velY, life: 60, maxLife: 60
+                });
+            }
+
+            static update() {
+                gameState.visual.particles.forEach((particle, index) => {
+                    particle.y += particle.velY;
+                    particle.velY += 0.1;
+                    particle.life--;
+                    
+                    if (particle.life <= 0) {
+                        gameState.visual.particles.splice(index, 1);
+                    }
+                });
+            }
+        }
+
+        // Boss AI system
+        class BossAI {
+            static update(boss) {
+                if (!boss || boss.health <= 0) return;
+                
+                boss.ai.timer++;
+                const player = gameState.player;
+                const distToPlayer = Math.abs(boss.x - player.x);
+                
+                switch (boss.ai.state) {
+                    case 'idle':
+                        if (distToPlayer < 300) {
+                            boss.ai.state = 'combat';
+                            boss.ai.timer = 0;
+                        }
+                        break;
+                        
+                    case 'combat':
+                        if (boss.ai.attackCooldown <= 0) {
+                            this.performAttack(boss);
+                            boss.ai.attackCooldown = 120 - boss.phase * 10;
+                        } else {
+                            boss.ai.attackCooldown--;
+                        }
+                        
+                        // Movement
+                        if (distToPlayer > 100) {
+                            boss.velX = boss.x < player.x ? 2 : -2;
+                        } else {
+                            boss.velX = 0;
+                        }
+                        break;
+                        
+                    case 'glitch':
+                        // Special glitch phase abilities
+                        if (boss.ai.timer % 30 === 0) {
+                            this.glitchEffect(boss);
+                        }
+                        
+                        if (boss.ai.timer > 180) {
+                            boss.ai.state = 'combat';
+                            boss.ai.timer = 0;
+                        }
+                        break;
+                }
+                
+                // Phase transitions
+                if (boss.phase > 1 && Math.random() < 0.01) {
+                    boss.ai.state = 'glitch';
+                    boss.ai.timer = 0;
+                }
+            }
+
+            static performAttack(boss) {
+                const attacks = boss.attacks;
+                const attack = attacks[Math.floor(Math.random() * attacks.length)];
+                
+                switch (attack) {
+                    case 'charge':
+                        boss.velX = boss.x < gameState.player.x ? 8 : -8;
+                        ParticleSystem.create(boss.x, boss.y, '#f00', 'CHARGE!');
+                        break;
+                        
+                    case 'duplicate':
+                        // Create temporary duplicate
+                        const duplicate = {
+                            x: boss.x + 100, y: boss.y, width: boss.width, height: boss.height,
+                            health: 1, maxHealth: 1, damage: boss.phase * 10,
+                            type: 'boss_duplicate', velX: 0, velY: 0, ai: { state: 'temp', timer: 0 }
+                        };
+                        gameState.entities.enemies.push(duplicate);
+                        ParticleSystem.create(boss.x, boss.y, '#f0f', 'DUPLICATE!');
+                        break;
+                        
+                    case 'teleport':
+                        const newX = Math.random() * (gameState.world.levelWidth - 400) + 200;
+                        boss.x = newX;
+                        ParticleSystem.create(boss.x, boss.y, '#0ff', 'TELEPORT!');
+                        break;
+                        
+                    case 'glitch_wave':
+                        // Create wave of corruption
+                        for (let i = 0; i < 5; i++) {
+                            gameState.entities.projectiles.push({
+                                x: boss.x, y: boss.y, width: 8, height: 8,
+                                velX: (i - 2) * 3, velY: -2, damage: boss.phase * 5,
+                                type: 'glitch_wave', life: 120
+                            });
+                        }
+                        ParticleSystem.create(boss.x, boss.y, '#f0f', 'GLITCH WAVE!');
+                        break;
+                }
+            }
+
+            static glitchEffect(boss) {
+                const effects = [
+                    () => { gameState.visual.glitchLevel += 2; }, // Screen glitch
+                    () => { gameState.player.velY = -15; }, // Forced jump
+                    () => { gameState.player.stability += 10; }, // Corruption blast
+                    () => { // Gravity flip
+                        setTimeout(() => {
+                            gameState.entities.platforms.forEach(p => p.y -= 20);
+                        }, 60);
+                    }
+                ];
+                
+                const effect = effects[Math.floor(Math.random() * effects.length)];
+                effect();
+                
+                ParticleSystem.create(boss.x, boss.y, '#f0f', 'REALITY GLITCH!');
+            }
+        }
+
+        // Enhanced player movement with new abilities
+        function updatePlayer() {
+            const player = gameState.player;
+            const stats = player.stats;
+            let speed = 5 + (stats.agi * 0.2);
+            const jumpPower = 12 + (stats.agi * 0.1);
+
+            // Store position history for rollback jump
+            if (gameState.visual.particles.length % 5 === 0) {
+                player.positionHistory.push({ x: player.x, y: player.y });
+                if (player.positionHistory.length > 20) {
+                    player.positionHistory.shift();
+                }
+            }
+
+            // Horizontal movement
+            if (gameState.input.keys['a']) {
+                player.velX = -speed;
+                player.facingRight = false;
+            } else if (gameState.input.keys['d']) {
+                player.velX = speed;
+                player.facingRight = true;
+            } else {
+                player.velX *= 0.8;
+            }
+
+            // Phase dash ability
+            if (gameState.input.keys['shift'] && player.powers.phaseDash && player.dashCooldown <= 0) {
+                const dashDistance = player.facingRight ? 100 : -100;
+                player.x += dashDistance;
+                player.dashCooldown = 120;
+                player.stability += 5;
+                ParticleSystem.create(player.x, player.y, '#0ff', 'PHASE DASH');
+            }
+
+            // Rollback jump ability
+            if (gameState.input.keys['r'] && player.powers.rollbackJump && player.positionHistory.length > 5) {
+                const rollbackPos = player.positionHistory[player.positionHistory.length - 5];
+                player.x = rollbackPos.x;
+                player.y = rollbackPos.y;
+                player.velY = -jumpPower;
+                ParticleSystem.create(player.x, player.y, '#f0f', 'ROLLBACK');
+            }
+
+            // Jumping and wall jump
+            if (gameState.input.keys[' ']) {
+                if (player.onGround) {
+                    player.velY = -jumpPower;
+                    player.onGround = false;
+                } else if (player.powers.wallJump && player.wallJumpCooldown <= 0) {
+                    // Check for walls
+                    const wallLeft = gameState.entities.platforms.some(p => 
+                        player.x <= p.x + p.width + 5 && player.x >= p.x + p.width - 5 &&
+                        player.y >= p.y - player.height && player.y <= p.y + p.height
+                    );
+                    const wallRight = gameState.entities.platforms.some(p => 
+                        player.x + player.width >= p.x - 5 && player.x + player.width <= p.x + 5 &&
+                        player.y >= p.y - player.height && player.y <= p.y + p.height
+                    );
+                    
+                    if (wallLeft || wallRight) {
+                        player.velY = -jumpPower * 0.8;
+                        player.velX = wallLeft ? 8 : -8;
+                        player.wallJumpCooldown = 30;
+                        ParticleSystem.create(player.x, player.y, '#0af', 'WALL JUMP');
+                    }
+                }
+            }
+
+            // Attack
+            if (gameState.input.keys['f']) {
+                CombatSystem.checkPlayerAttack();
+            }
+
+            // Interact
+            if (gameState.input.keys['e']) {
+                InteractionSystem.interact();
+            }
+
+            // Update cooldowns
+            if (player.dashCooldown > 0) player.dashCooldown--;
+            if (player.wallJumpCooldown > 0) player.wallJumpCooldown--;
+
+            // Gravity
+            player.velY += 0.8;
+            if (player.velY > 15) player.velY = 15;
+
+            // Update position
+            player.x += player.velX;
+            player.y += player.velY;
+
+            // Platform collision
+            handlePlatformCollision();
+
+            // World boundaries
+            if (player.x < 0) player.x = 0;
+            if (player.x > gameState.world.levelWidth - player.width) {
+                player.x = gameState.world.levelWidth - player.width;
+            }
+            
+            // Death/respawn
+            if (player.y > 900) {
+                respawnPlayer();
+            }
+
+            // Trigger boss fight
+            if (!gameState.world.bossActive && gameState.world.boss && 
+                Math.abs(player.x - gameState.world.boss.x) < 200) {
+                gameState.world.bossActive = true;
+                document.getElementById('bossHealth').style.display = 'block';
+                ParticleSystem.create(gameState.world.boss.x, gameState.world.boss.y - 50, '#f00', gameState.world.boss.name);
+            }
+
+            // Camera update
+            const targetCameraX = Math.max(0, Math.min(gameState.world.levelWidth - 1200, player.x - 600));
+            gameState.visual.camera.x += (targetCameraX - gameState.visual.camera.x) * 0.1;
+        }
+
+        function handlePlatformCollision() {
+            const player = gameState.player;
+            player.onGround = false;
+            
+            gameState.entities.platforms.forEach(platform => {
+                if (player.x < platform.x + platform.width &&
+                    player.x + player.width > platform.x &&
+                    player.y < platform.y + platform.height &&
+                    player.y + player.height > platform.y) {
+                    
+                    // Unstable platforms
+                    if (platform.type === 'unstable' && Math.random() < 0.005) {
+                        platform.y += 2;
+                        ParticleSystem.create(platform.x, platform.y, '#f80', 'UNSTABLE');
+                    }
+                    
+                    // Collision resolution
+                    if (player.velY > 0 && player.y < platform.y) {
+                        player.y = platform.y - player.height;
+                        player.velY = 0;
+                        player.onGround = true;
+                    } else if (player.velY < 0 && player.y > platform.y) {
+                        player.y = platform.y + platform.height;
+                        player.velY = 0;
+                    } else if (player.velX > 0) {
+                        player.x = platform.x - player.width;
+                        player.velX = 0;
+                    } else if (player.velX < 0) {
+                        player.x = platform.x + platform.width;
+                        player.velX = 0;
+                    }
+                }
+            });
+        }
+
+        // Enhanced enemy AI
+        function updateEnemies() {
+            gameState.entities.enemies.forEach((enemy, index) => {
+                // Remove temporary duplicates
+                if (enemy.type === 'boss_duplicate') {
+                    enemy.ai.timer++;
+                    if (enemy.ai.timer > 300) {
+                        gameState.entities.enemies.splice(index, 1);
+                        return;
+                    }
+                }
+                
+                // Enhanced AI behavior
+                const distToPlayer = Math.abs(enemy.x - gameState.player.x);
+                const playerInRange = distToPlayer < 200 && Math.abs(enemy.y - gameState.player.y) < 100;
+                
+                if (playerInRange) {
+                    // Chase player
+                    enemy.velX = enemy.x < gameState.player.x ? Math.abs(enemy.velX) : -Math.abs(enemy.velX);
+                    
+                    // Attack if close enough
+                    if (distToPlayer < 40 && Math.random() < 0.02) {
+                        CombatSystem.attack(enemy, gameState.player);
+                    }
+                } else {
+                    // Patrol behavior
+                    if (Math.random() < 0.01) {
+                        enemy.velX *= -1;
+                    }
+                }
+                
+                // Movement and collision
+                enemy.x += enemy.velX;
+                
+                // Simple gravity and platform collision for enemies
+                enemy.velY = enemy.velY || 0;
+                enemy.velY += 0.8;
+                enemy.y += enemy.velY;
+                
+                gameState.entities.platforms.forEach(platform => {
+                    if (enemy.x < platform.x + platform.width &&
+                        enemy.x + enemy.width > platform.x &&
+                        enemy.y < platform.y + platform.height &&
+                        enemy.y + enemy.height > platform.y) {
+                        if (enemy.y < platform.y) {
+                            enemy.y = platform.y - enemy.height;
+                            enemy.velY = 0;
+                        }
+                    }
+                });
+                
+                // Remove enemies that fall off the world
+                if (enemy.y > 900) {
+                    gameState.entities.enemies.splice(index, 1);
+                }
+            });
+        }
+
+        // Update projectiles
+        function updateProjectiles() {
+            gameState.entities.projectiles.forEach((projectile, index) => {
+                projectile.x += projectile.velX;
+                projectile.y += projectile.velY;
+                projectile.life--;
+                
+                // Check collision with player
+                if (projectile.x < gameState.player.x + gameState.player.width &&
+                    projectile.x + projectile.width > gameState.player.x &&
+                    projectile.y < gameState.player.y + gameState.player.height &&
+                    projectile.y + projectile.height > gameState.player.y) {
+                    
+                    // Damage player
+                    gameState.player.health -= projectile.damage;
+                    gameState.player.stability += projectile.damage * 0.5;
+                    ParticleSystem.create(gameState.player.x, gameState.player.y, '#f00', `-${projectile.damage}`);
+                    
+                    gameState.entities.projectiles.splice(index, 1);
+                    return;
+                }
+                
+                // Remove old projectiles
+                if (projectile.life <= 0 || projectile.y > 800) {
+                    gameState.entities.projectiles.splice(index, 1);
+                }
+            });
+        }
+
+        // Enhanced loot collection
+        function updateLoot() {
+            gameState.entities.loot.forEach((item, index) => {
+                // Simple gravity for loot
+                if (!item.onGround) {
+                    item.y += 2;
+                    
+                    // Check ground collision
+                    gameState.entities.platforms.forEach(platform => {
+                        if (item.x >= platform.x && item.x <= platform.x + platform.width &&
+                            item.y >= platform.y - item.height && item.y <= platform.y) {
+                            item.y = platform.y - item.height;
+                            item.onGround = true;
+                        }
+                    });
+                }
+                
+                // Player collection
+                if (gameState.player.x < item.x + item.width &&
+                    gameState.player.x + gameState.player.width > item.x &&
+                    gameState.player.y < item.y + item.height &&
+                    gameState.player.y + gameState.player.height > item.y) {
+                    
+                    collectLoot(item, index);
+                }
+            });
+        }
+
+        function collectLoot(item, index) {
+            switch (item.type) {
+                case 'health_potion':
+                    gameState.player.health = Math.min(gameState.player.maxHealth, gameState.player.health + item.value);
+                    ParticleSystem.create(item.x, item.y, '#0f0', '+Health');
+                    break;
+                case 'xp_fragment':
+                    gameState.player.xp += item.value;
+                    ParticleSystem.create(item.x, item.y, '#ff0', '+XP');
+                    ProgressionSystem.checkLevelUp();
+                    break;
+                case 'glitch_shard':
+                    gameState.player.inventory.push({
+                        name: 'Glitch Shard',
+                        type: 'material',
+                        description: 'Fragment of corrupted data'
+                    });
+                    ParticleSystem.create(item.x, item.y, '#f0f', '+Shard');
+                    break;
+                case 'weapon':
+                    gameState.player.inventory.push(item.weapon);
+                    ParticleSystem.create(item.x, item.y, '#0ff', `Found: ${item.weapon.name}`);
+                    break;
+            }
+            
+            gameState.entities.loot.splice(index, 1);
+        }
+
+        function respawnPlayer() {
+            const checkpoint = gameState.player.lastCheckpoint;
+            gameState.player.x = checkpoint.x;
+            gameState.player.y = checkpoint.y;
+            gameState.player.health = Math.floor(gameState.player.maxHealth * 0.7);
+            gameState.player.stability = Math.floor(gameState.player.stability * 0.8);
+            gameState.player.velX = 0;
+            gameState.player.velY = 0;
+            
+            ParticleSystem.create(gameState.player.x, gameState.player.y, '#0ff', 'RESPAWNED');
+        }
+
+        // Corruption effects system
+        function updateCorruption() {
+            const corruption = gameState.player.stability / gameState.player.maxStability;
+            gameState.visual.glitchLevel = corruption * 5;
+            
+            // Visual corruption effects
+            const glitchScreen = document.getElementById('glitchScreen');
+            glitchScreen.style.opacity = corruption * 0.3;
+            
+            if (corruption > 0.7) {
+                document.body.classList.add('corruption-high');
+            } else {
+                document.body.classList.remove('corruption-high');
+            }
+            
+            // Gameplay corruption effects
+            if (corruption > 0.5 && Math.random() < 0.001) {
+                // Random corruption event
+                corruptionEvent();
+            }
+            
+            // Critical corruption
+            if (gameState.player.stability >= gameState.player.maxStability) {
+                gameState.player.stability = 0;
+                gameState.player.health = Math.floor(gameState.player.health * 0.5);
+                ParticleSystem.create(gameState.player.x, gameState.player.y, '#f0f', 'CRITICAL CORRUPTION!');
+            }
+        }
+
+        function corruptionEvent() {
+            const events = [
+                () => { // Gravity flip
+                    setTimeout(() => {
+                        gameState.entities.platforms.forEach(p => {
+                            p.y += Math.random() * 20 - 10;
+                        });
+                    }, 1000);
+                    ParticleSystem.create(gameState.player.x, gameState.player.y, '#f0f', 'REALITY SHIFT!');
+                },
+                () => { // Control inversion
+                    const originalKeys = { ...gameState.input.keys };
+                    setTimeout(() => {
+                        if (originalKeys['a']) gameState.input.keys['d'] = true;
+                        if (originalKeys['d']) gameState.input.keys['a'] = true;
+                    }, 2000);
+                    ParticleSystem.create(gameState.player.x, gameState.player.y, '#f0f', 'CONTROLS INVERTED!');
+                },
+                () => { // Duplicate enemies
+                    gameState.entities.enemies.forEach(enemy => {
+                        if (Math.random() < 0.3) {
+                            const duplicate = { ...enemy };
+                            duplicate.x += 50;
+                            duplicate.health = Math.floor(enemy.health * 0.5);
+                            gameState.entities.enemies.push(duplicate);
+                        }
+                    });
+                    ParticleSystem.create(gameState.player.x, gameState.player.y, '#f0f', 'ENEMY DUPLICATION!');
+                },
+                () => { // Screen distortion
+                    gameState.visual.glitchLevel += 3;
+                    setTimeout(() => {
+                        gameState.visual.glitchLevel = Math.max(0, gameState.visual.glitchLevel - 3);
+                    }, 3000);
+                    ParticleSystem.create(gameState.player.x, gameState.player.y, '#f0f', 'VISUAL CORRUPTION!');
+                }
+            ];
+            
+            const event = events[Math.floor(Math.random() * events.length)];
+            event();
+        }
+
+        // Enhanced rendering system
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Apply corruption visual effects
+            if (gameState.visual.glitchLevel > 0) {
+                ctx.save();
+                ctx.globalCompositeOperation = 'difference';
+                ctx.fillStyle = `rgba(255, 0, 255, ${gameState.visual.glitchLevel * 0.1})`;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.restore();
+            }
+            
+            ctx.save();
+            ctx.translate(-gameState.visual.camera.x, 0);
+
+            // Background elements
+            renderBackground();
+            
+            // Render platforms with glitch effects
+            gameState.entities.platforms.forEach(platform => {
+                let color = '#666';
+                if (platform.type === 'ground') color = '#4a4a4a';
+                else if (platform.type === 'unstable') color = '#844';
+                else if (platform.type === 'boss_arena') color = '#822';
+                
+                ctx.fillStyle = color;
+                ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+                
+                // Glitch effects on platforms
+                if (Math.random() < 0.01 * gameState.visual.glitchLevel) {
+                    ctx.fillStyle = '#f0f';
+                    ctx.fillRect(
+                        platform.x + Math.random() * platform.width, 
+                        platform.y, 
+                        Math.random() * 20 + 5, 
+                        Math.random() * 10 + 2
+                    );
+                }
+            });
+
+            // Render enemies with enhanced visuals
+            gameState.entities.enemies.forEach(enemy => {
+                ctx.fillStyle = getEnemyColor(enemy.type);
+                
+                // Glitch effect for enemies
+                if (Math.random() < 0.05 * gameState.visual.glitchLevel) {
+                    ctx.save();
+                    ctx.translate(enemy.x + enemy.width/2, enemy.y + enemy.height/2);
+                    ctx.rotate((Math.random() - 0.5) * 0.2);
+                    ctx.fillRect(-enemy.width/2, -enemy.height/2, enemy.width, enemy.height);
+                    ctx.restore();
+                } else {
+                    ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                }
+                
+                // Health bar for damaged enemies
+                if (enemy.health < enemy.maxHealth) {
+                    ctx.fillStyle = '#f00';
+                    ctx.fillRect(enemy.x, enemy.y - 12, enemy.width, 6);
+                    ctx.fillStyle = '#0f0';
+                    ctx.fillRect(enemy.x, enemy.y - 12, (enemy.health / enemy.maxHealth) * enemy.width, 6);
+                }
+                
+                // Enemy type indicator
+                ctx.fillStyle = '#fff';
+                ctx.font = '8px Courier New';
+                ctx.fillText(enemy.type.charAt(0).toUpperCase(), enemy.x, enemy.y - 15);
+            });
+
+            // Render boss
+            if (gameState.world.boss) {
+                const boss = gameState.world.boss;
+                ctx.fillStyle = '#a00';
+                
+                // Boss pulsing effect
+                const scale = 1 + Math.sin(Date.now() * 0.01) * 0.1;
+                ctx.save();
+                ctx.translate(boss.x + boss.width/2, boss.y + boss.height/2);
+                ctx.scale(scale, scale);
+                ctx.fillRect(-boss.width/2, -boss.height/2, boss.width, boss.height);
+                ctx.restore();
+                
+                // Boss glitch effects based on phase
+                for (let i = 0; i < boss.phase; i++) {
+                    ctx.fillStyle = '#f0f';
+                    ctx.fillRect(
+                        boss.x + Math.random() * boss.width, 
+                        boss.y + Math.random() * boss.height, 
+                        8, 8
+                    );
+                }
+                
+                // Boss name
+                ctx.fillStyle = '#f00';
+                ctx.font = '16px Courier New';
+                ctx.fillText(boss.name, boss.x, boss.y - 20);
+                
+                // Phase indicator
+                ctx.fillStyle = '#ff0';
+                ctx.font = '12px Courier New';
+                ctx.fillText(`Phase ${boss.phase}/${boss.maxPhases}`, boss.x, boss.y - 5);
+            }
+
+            // Render projectiles
+            gameState.entities.projectiles.forEach(projectile => {
+                ctx.fillStyle = projectile.type === 'glitch_wave' ? '#f0f' : '#f80';
+                ctx.fillRect(projectile.x, projectile.y, projectile.width, projectile.height);
+                
+                // Trail effect
+                ctx.globalAlpha = 0.5;
+                ctx.fillRect(projectile.x - projectile.velX, projectile.y - projectile.velY, projectile.width, projectile.height);
+                ctx.globalAlpha = 1;
+            });
+
+            // Render interactables with special effects
+            gameState.entities.interactables.forEach(obj => {
+                let color = getInteractableColor(obj.type);
+                
+                if (obj.type === 'campfire') {
+                    // Animated fire effect
+                    const flicker = Math.sin(Date.now() * 0.02) * 0.3 + 0.7;
+                    ctx.fillStyle = `rgba(255, ${100 * flicker}, 0, ${flicker})`;
+                    ctx.fillRect(obj.x, obj.y, obj.width, obj.height);
+                    
+                    // Fire particles
+                    if (Math.random() < 0.3) {
+                        ParticleSystem.create(obj.x + Math.random() * obj.width, obj.y, '#ff0', '', -3);
+                    }
+                } else {
+                    ctx.fillStyle = color;
+                    ctx.fillRect(obj.x, obj.y, obj.width, obj.height);
+                    
+                    // Pulsing effect for important items
+                    if (obj.type === 'treasure_chest' && !obj.locked) {
+                        const pulse = Math.sin(Date.now() * 0.01) * 0.5 + 0.5;
+                        ctx.fillStyle = `rgba(255, 255, 0, ${pulse})`;
+                        ctx.fillRect(obj.x - 4, obj.y - 4, obj.width + 8, obj.height + 8);
+                    }
+                }
+                
+                // Interaction indicator for nearby objects
+                if (gameState.input.nearInteractable === obj) {
+                    ctx.fillStyle = '#0ff';
+                    ctx.strokeStyle = '#0ff';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(obj.x - 5, obj.y - 5, obj.width + 10, obj.height + 10);
+                }
+            });
+
+            // Render loot with enhanced effects
+            gameState.entities.loot.forEach(item => {
+                const baseColor = getLootColor(item.type);
+                ctx.fillStyle = baseColor;
+                
+                // Floating animation
+                const float = Math.sin(Date.now() * 0.005 + item.x * 0.01) * 3;
+                const drawY = item.y + float;
+                
+                ctx.fillRect(item.x, drawY, item.width, item.height);
+                
+                // Rarity glow for weapons
+                if (item.type === 'weapon' && item.weapon) {
+                    const glowColor = item.weapon.color || '#fff';
+                    ctx.shadowColor = glowColor;
+                    ctx.shadowBlur = 10;
+                    ctx.fillStyle = glowColor;
+                    ctx.fillRect(item.x - 1, drawY - 1, item.width + 2, item.height + 2);
+                    ctx.shadowBlur = 0;
+                }
+            });
+
+            // Render player with enhanced visuals
+            renderPlayer();
+
+            // Render particles with various effects
+            gameState.visual.particles.forEach(particle => {
+                ctx.globalAlpha = particle.life / particle.maxLife;
+                ctx.fillStyle = particle.color;
+                ctx.font = `${12 + (1 - particle.life / particle.maxLife) * 4}px Courier New`;
+                
+                // Text shadow for better visibility
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 2;
+                ctx.strokeText(particle.text, particle.x, particle.y);
+                ctx.fillText(particle.text, particle.x, particle.y);
+                
+                ctx.globalAlpha = 1;
+            });
+
+            // Zone transition effects
+            if (gameState.world.levelComplete) {
+                ctx.fillStyle = 'rgba(0, 255, 0, 0.3)';
+                ctx.fillRect(0, 0, gameState.world.levelWidth, 800);
+                
+                ctx.fillStyle = '#0f0';
+                ctx.font = '48px Courier New';
+                ctx.fillText('LEVEL COMPLETE!', gameState.visual.camera.x + 300, 400);
+            }
+
+            ctx.restore();
+            
+            // UI overlays (not affected by camera)
+            renderUI();
+        }
+
+        function renderBackground() {
+            // Zone-specific backgrounds
+            const zone = gameState.world.currentZone;
+            let bgColor = '#2a1810';
+            
+            switch (zone) {
+                case 'Stable Forest':
+                    bgColor = '#1a2a1a';
+                    break;
+                case 'Corrupted Plains':
+                    bgColor = '#2a1a2a';
+                    break;
+                case 'Scrap Mines':
+                    bgColor = '#1a1a1a';
+                    break;
+                case 'Glitch Tower':
+                    bgColor = '#2a2a1a';
+                    break;
+                case 'Final Core':
+                    bgColor = '#1a1a2a';
+                    break;
+            }
+            
+            // Gradient background
+            const gradient = ctx.createLinearGradient(0, 0, 0, 800);
+            gradient.addColorStop(0, bgColor);
+            gradient.addColorStop(1, '#000');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(gameState.visual.camera.x, 0, 1200, 800);
+            
+            // Background corruption effects
+            if (gameState.visual.glitchLevel > 2) {
+                for (let i = 0; i < gameState.visual.glitchLevel; i++) {
+                    ctx.fillStyle = `rgba(255, 0, 255, ${Math.random() * 0.2})`;
+                    ctx.fillRect(
+                        gameState.visual.camera.x + Math.random() * 1200,
+                        Math.random() * 800,
+                        Math.random() * 100 + 50,
+                        Math.random() * 50 + 10
+                    );
+                }
+            }
+        }
+
+        function renderPlayer() {
+            const player = gameState.player;
+            
+            // Player corruption visual effects
+            if (player.stability > 50) {
+                ctx.save();
+                ctx.translate(player.x + player.width/2, player.y + player.height/2);
+                ctx.rotate((Math.random() - 0.5) * 0.1);
+                ctx.translate(-player.width/2, -player.height/2);
+            }
+            
+            // Main player body
+            ctx.fillStyle = '#0ff';
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            
+            // Weapon visual
+            const weapon = player.weapon;
+            const weaponColor = weapon.color || '#fff';
+            ctx.fillStyle = weaponColor;
+            const weaponX = player.facingRight ? player.x + 32 : player.x - 8;
+            ctx.fillRect(weaponX, player.y + 15, 8, 20);
+            
+            // Power indicators
+            if (player.powers.phaseDash && player.dashCooldown > 0) {
+                ctx.fillStyle = `rgba(0, 255, 255, ${player.dashCooldown / 120})`;
+                ctx.fillRect(player.x - 5, player.y - 5, player.width + 10, player.height + 10);
+            }
+            
+            // Corruption aura
+            if (player.stability > 30) {
+                ctx.fillStyle = `rgba(255, 0, 255, ${(player.stability / 100) * 0.3})`;
+                ctx.fillRect(player.x - 10, player.y - 10, player.width + 20, player.height + 20);
+            }
+            
+            if (player.stability > 50) {
+                ctx.restore();
+            }
+            
+            // Direction indicator
+            ctx.fillStyle = '#fff';
+            const eyeX = player.facingRight ? player.x + 24 : player.x + 8;
+            ctx.fillRect(eyeX, player.y + 10, 4, 4);
+        }
+
+        function renderUI() {
+            // Boss health bar
+            if (gameState.world.bossActive && gameState.world.boss) {
+                const boss = gameState.world.boss;
+                const healthPercent = (boss.health / boss.maxHealth) * 100;
+                document.getElementById('bossHealthFill').style.width = healthPercent + '%';
+            }
+        }
+
+        // Color helper functions
+        function getEnemyColor(type) {
+            const colors = {
+                'glitch_wolf': '#f80',
+                'data_sprite': '#80f',
+                'corrupted_guard': '#f08',
+                'void_stalker': '#808',
+                'boss_duplicate': '#f0f'
+            };
+            return colors[type] || '#f00';
+        }
+
+        function getLootColor(type) {
+            const colors = {
+                'health_potion': '#0f0',
+                'xp_fragment': '#ff0',
+                'glitch_shard': '#f0f',
+                'weapon': '#0ff'
+            };
+            return colors[type] || '#fff';
+        }
+
+        function getInteractableColor(type) {
+            const colors = {
+                'campfire': '#ff4400',
+                'treasure_chest': '#ffa500',
+                'data_terminal': '#00ffff',
+                'glitch_crystal': '#ff00ff',
+                'weapon_cache': '#ffff00'
+            };
+            return colors[type] || '#888';
+        }
+
+        // Input handling
+        document.addEventListener('keydown', (e) => {
+            gameState.input.keys[e.key.toLowerCase()] = true;
+            
+            if (e.key.toLowerCase() === 'i') {
+                toggleInventory();
+            } else if (e.key.toLowerCase() === 'k') {
+                toggleSkillTree();
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            gameState.input.keys[e.key.toLowerCase()] = false;
+        });
+
+        canvas.addEventListener('mousedown', (e) => {
+            gameState.input.mousePressed = true;
+            CombatSystem.checkPlayerAttack();
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            gameState.input.mousePressed = false;
+        });
+
+        // UI functions
+        function updateUI() {
+            const player = gameState.player;
+            
+            document.getElementById('level').textContent = player.level;
+            document.getElementById('xp').textContent = player.xp;
+            document.getElementById('nextLevelXp').textContent = player.level * 100;
+            document.getElementById('skillPoints').textContent = player.skillPoints;
+            document.getElementById('health').textContent = Math.floor(player.health);
+            document.getElementById('stability').textContent = Math.floor(player.stability);
+            
+            // Update bars
+            const healthPercent = (player.health / player.maxHealth) * 100;
+            document.getElementById('healthBar').style.width = healthPercent + '%';
+            
+            const stabilityPercent = (player.stability / player.maxStability) * 100;
+            document.getElementById('stabilityBar').style.width = stabilityPercent + '%';
+            
+            // Update stats with +/- buttons
+            Object.keys(player.stats).forEach(stat => {
+                document.getElementById(stat).textContent = player.stats[stat];
+                const btn = document.getElementById(stat + 'Btn');
+                if (btn) {
+                    btn.disabled = player.skillPoints <= 0;
+                }
+            });
+            
+            document.getElementById('currentZone').textContent = gameState.world.currentZone;
+            document.getElementById('currentDepth').textContent = gameState.world.currentDepth;
+        }
+
+        function toggleInventory() {
+            const panel = document.getElementById('inventoryPanel');
+            if (panel.style.display === 'none' || !panel.style.display) {
+                showInventory();
+            } else {
+                closeInventory();
+            }
+        }
+
+        function showInventory() {
+            const panel = document.getElementById('inventoryPanel');
+            const content = document.getElementById('inventoryContent');
+            const player = gameState.player;
+            
+            let html = `
+                <div><strong>Current Weapon:</strong> ${player.weapon.name} (${player.weapon.damage} damage)</div>
+                <div style="margin: 10px 0;"><strong>Inventory:</strong></div>
+            `;
+            
+            if (player.inventory.length === 0) {
+                html += '<div>Empty</div>';
+            } else {
+                player.inventory.forEach((item, index) => {
+                    let itemHtml = `<div style="margin: 5px 0; padding: 5px; border: 1px solid #444;">`;
+                    itemHtml += `<strong>${item.name}</strong>`;
+                    if (item.damage) {
+                        itemHtml += ` - ${item.damage} damage`;
+                        if (item.effects && item.effects.length > 0) {
+                            itemHtml += `<br><small>${item.effects.join(', ')}</small>`;
+                        }
+                        if (item.damage > player.weapon.damage) {
+                            itemHtml += `<br><button onclick="equipWeapon(${index})" style="font-size: 10px;">Equip</button>`;
+                        }
+                    }
+                    if (item.description) {
+                        itemHtml += `<br><small>${item.description}</small>`;
+                    }
+                    itemHtml += '</div>';
+                    html += itemHtml;
+                });
+            }
+            
+            html += `
+                <div style="margin: 10px 0;"><strong>Powers Unlocked:</strong></div>
+                <div>Phase Dash: ${player.powers.phaseDash ? '✓' : '✗'} ${player.powers.phaseDash ? '(Shift)' : ''}</div>
+                <div>Rollback Jump: ${player.powers.rollbackJump ? '✓' : '✗'} ${player.powers.rollbackJump ? '(R)' : ''}</div>
+                <div>Wall Jump: ${player.powers.wallJump ? '✓' : '✗'}</div>
+                <div>Code Grapple: ${player.powers.codeGrapple ? '✓' : '✗'}</div>
+                <div>Reality Swap: ${player.powers.realitySwap ? '✓' : '✗'}</div>
+                
+                <div style="margin: 10px 0;"><strong>Stats:</strong></div>
+                <div>Corruption Resistance: ${Math.floor(player.stats.stb * 5)}%</div>
+                <div>Critical Hit Chance: ${player.stats.lck}%</div>
+                <div>Movement Speed: ${Math.floor((5 + player.stats.agi * 0.2) * 10) / 10}</div>
+            `;
+            
+            content.innerHTML = html;
+            panel.style.display = 'block';
+        }
+
+        function closeInventory() {
+            document.getElementById('inventoryPanel').style.display = 'none';
+        }
+
+        function toggleSkillTree() {
+            const panel = document.getElementById('skillTreePanel');
+            if (panel.style.display === 'none' || !panel.style.display) {
+                showSkillTree();
+            } else {
+                closeSkillTree();
+            }
+        }
+
+        function showSkillTree() {
+            const panel = document.getElementById('skillTreePanel');
+            SkillSystem.renderSkillTree();
+            panel.style.display = 'block';
+        }
+
+        function closeSkillTree() {
+            document.getElementById('skillTreePanel').style.display = 'none';
+        }
+
+        function equipWeapon(index) {
+            const weapon = gameState.player.inventory[index];
+            if (weapon.damage) {
+                gameState.player.weapon = weapon;
+                ParticleSystem.create(gameState.player.x, gameState.player.y, '#0ff', `Equipped: ${weapon.name}`);
+                closeInventory();
+            }
+        }
+
+        function allocateStat(stat) {
+            ProgressionSystem.allocateStat(stat);
+        }
+
+        function unlockSkill(skillId, tree) {
+            SkillSystem.unlockSkill(skillId, tree);
+            SkillSystem.renderSkillTree(); // Refresh the display
+        }
+
+        // Main game loop
+        function gameLoop(currentTime) {
+            const deltaTime = currentTime - gameState.lastTime;
+            gameState.lastTime = currentTime;
+            
+            // Update all game systems
+            updatePlayer();
+            updateEnemies();
+            updateProjectiles();
+            updateLoot();
+            InteractionSystem.update();
+            ParticleSystem.update();
+            updateCorruption();
+            
+            // Update boss AI
+            if (gameState.world.boss && gameState.world.bossActive) {
+                BossAI.update(gameState.world.boss);
+            }
+            
+            // Render everything
+            render();
+            updateUI();
+            
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Initialize the enhanced game
+        function initEnhancedGame() {
+            // Generate initial level
+            const levelData = LevelGenerator.generateLevel(gameState.world.currentZone, gameState.world.currentDepth);
+            gameState.entities.platforms = levelData.platforms;
+            gameState.entities.enemies = levelData.enemies;
+            gameState.entities.interactables = levelData.interactables;
+            gameState.entities.loot = levelData.loot;
+            gameState.world.levelWidth = levelData.width;
+            
+            // Generate first boss
+            gameState.world.boss = LevelGenerator.generateBoss(levelData.bossX, 520, gameState.world.currentDepth);
+            
+            // Set initial checkpoint
+            gameState.player.lastCheckpoint = {
+                x: gameState.player.x,
+                y: gameState.player.y,
+                zone: gameState.world.currentZone,
+                depth: gameState.world.currentDepth
+            };
+        }
+
+        // Make functions globally available
+        window.closeInventory = closeInventory;
+        window.closeSkillTree = closeSkillTree;
+        window.allocateStat = allocateStat;
+        window.unlockSkill = unlockSkill;
+        window.equipWeapon = equipWeapon;
+
+        // Start the enhanced game
+        initEnhancedGame();
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
